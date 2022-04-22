@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\PartialForm;
 use Illuminate\Http\Request;
+
+use App\Models\PartialForm;
+use App\Models\User;
 
 class PartialFormController extends Controller
 {
@@ -19,16 +21,44 @@ class PartialFormController extends Controller
                 'form_type' => $formType
             ]);
 
-            return ['pfid' => $partialForm->id];
+            return [
+                'pf_id' => $partialForm->id,
+                'pf_part_value' => json_decode($partialForm->part_value, true)
+            ];
         }
 
         $partialForm = $this->updatePartialForm($request, $pfid);
 
-        if ($partialForm->form_type === 'login') {
-            $this->partialFormLogin($partialForm);
-        } elseif ($partialForm->form_type === 'register') {
-            $this->partialFormRegister($partialForm);
+        if ($this->isPartialFormLogin($partialForm)) {
+            // DO LOGIN
+        } elseif ($this->isPartialFormRegister($partialForm)) {
+            $cred = json_decode($partialForm->part_value, true);
+            $token = $this->authRegister($cred);
+
+            return ['token' => $token];
         }
+
+        return [
+            'pf_id' => $partialForm->id,
+            'pf_part_value' => json_decode($partialForm->part_value, true)
+        ];
+    }
+
+    public function authRegister($cred)
+    {
+        // DO A VALIDATION
+        $user = User::create($cred);
+        $token = $user->createToken('auth-token');
+
+        return $token->plainTextToken;
+    }
+
+    public function isPartialFormLogin(PartialForm $partialForm) {
+        return $partialForm->form_type === 'login' && $this->validatePartialFormLogin($partialForm);
+    }
+
+    public function isPartialFormRegister(PartialForm $partialForm) {
+        return $partialForm->form_type === 'register' && $this->validatePartialFormRegister($partialForm);
     }
 
     public function updatePartialForm(Request $request, $pfid)
@@ -45,7 +75,7 @@ class PartialFormController extends Controller
         return $partialForm;
     }
 
-    public function partialFormLogin(PartialForm $partialForm) {
+    public function validatePartialFormLogin(PartialForm $partialForm) {
         $loginKeys = ['username' => 1, 'password' => 1];
         $partValue = json_decode($partialForm->part_value, true);
 
@@ -59,18 +89,16 @@ class PartialFormController extends Controller
         return;
     }
 
-    public function partialFormRegister(PartialForm $partialForm) {
-        $registerKeys = ['first_name' => 1, 'last_name' => 1, 'username' => 1, 'password' => 1];
+    public function validatePartialFormRegister(PartialForm $partialForm) {
+        $registerKeys = ['name' => 1, 'email' => 1, 'password' => 1];
         $partValue = json_decode($partialForm->part_value, true);
 
         $diff = array_diff_key($registerKeys, $partValue);
 
         if (count($diff) > 0) {
-            dd($partValue);
-            return;
+            return false;
         }
 
-        // DO REGISTER
-        return;
+        return true;
     }
 }
